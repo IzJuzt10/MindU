@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function LoginScreen() {
@@ -55,6 +55,10 @@ export default function LoginScreen() {
             secureTextEntry
           />
         </View>
+
+        <TouchableOpacity onPress={() => router.push('/forgot-password')}>
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>Login</Text>
@@ -114,6 +118,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: '#6C63FF',
+    fontWeight: '500',
+    marginTop: 10,
+    marginBottom: 20,
   },
   signupLink: {
     marginTop: 30,
