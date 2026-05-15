@@ -1,0 +1,35 @@
+{
+  "name": "mindu-back",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+ "scripts": {
+  "start": "ts-node src/server.ts",
+  "dev": "nodemon src/server.ts",
+  "build": "tsc"
+  },
+
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "expo": "^55.0.24",
+    "expo-sharing": "^55.0.19",
+    "expo-sqlite": "^55.0.16",
+    "express": "^5.2.1",
+    "install": "^0.13.0",
+    "npm": "^11.14.1",
+    "sqlite3": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.8.0",
+    "@types/react": "~19.2.10",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.2"
+  }
+}
