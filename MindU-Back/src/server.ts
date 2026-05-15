@@ -219,7 +219,7 @@ async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_activity_log_account_id ON activity_log(account_id);
   `);
   
-  console.log('✅ Database tables ready (no sample data inserted)');
+  console.log('Database tables ready');
 }
 
 // Initialize database on startup
