@@ -5,16 +5,15 @@ import express from 'express';
 import sqlite3 from 'sqlite3';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { promisify } from 'util';
 
 type Request = express.Request;
 type Response = express.Response;
+
 dotenv.config();
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const HOST = process.env.HOST || '0.0.0.0';
-
 const app = express();
+const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0';
 
 // ============================================================
 // MIDDLEWARE
@@ -27,12 +26,12 @@ app.use(express.json());
 // ============================================================
 const db = new sqlite3.Database('MindU.db');
 
-// Async wrappers for sqlite3 methods
+// Promisified database methods
 const dbGet = (sql: string, params?: any): Promise<any> => {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
+      if (err) reject(err);
+      else resolve(row);
     });
   });
 };
@@ -40,25 +39,38 @@ const dbGet = (sql: string, params?: any): Promise<any> => {
 const dbAll = (sql: string, params?: any): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows);
+      if (err) reject(err);
+      else resolve(rows);
     });
   });
 };
 
-const dbRun = (sql: string, params?: any, language?: any, notification_enabled?: any, timezone?: any, accountId?: string | string[]): Promise<sqlite3.RunResult> => {
+const dbRun = (sql: string, ...params: any[]): Promise<sqlite3.RunResult> => {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
+    const callback = function (this: sqlite3.RunResult, err: Error | null) {
+      if (err) reject(err);
+      else resolve(this);
+    };
+
+    if (params.length === 0) {
+      db.run(sql, callback);
+    } else {
+      db.run(sql, params, callback);
+    }
   });
 };
 
-const dbExec = promisify(db.exec.bind(db));
+const dbExec = (sql: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    db.exec(sql, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+};
 
 // ============================================================
-// TABLE CREATION (same schema, now async)
+// TABLE CREATION (only tables, no seed data)
 // ============================================================
 async function initDatabase() {
   await dbExec(`
@@ -207,55 +219,10 @@ async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_activity_log_account_id ON activity_log(account_id);
   `);
   
-  // Seed default data only if no account with id=1
-  const account = await dbGet('SELECT id FROM accounts WHERE id = 1');
-  if (!account) {
-    await dbExec(`
-      INSERT INTO accounts (id, username, email, password_hash, full_name, created_at) 
-      VALUES (1, 'default_user', 'user@local.app', '', 'Default User', datetime('now'));
-      
-      INSERT INTO account_settings (account_id, created_at) VALUES (1, datetime('now'));
-      
-      INSERT INTO categories (account_id, name, color, created_at) VALUES 
-      (1, 'Work', '#FF3B30', datetime('now')),
-      (1, 'Personal', '#34C759', datetime('now')),
-      (1, 'Birthday', '#AF52DE', datetime('now')),
-      (1, 'Meeting', '#007AFF', datetime('now')),
-      (1, 'Deadline', '#FF9500', datetime('now')),
-      (1, 'Holiday', '#FFCC00', datetime('now'));
-      
-      INSERT INTO tags (account_id, name, color, created_at) VALUES 
-      (1, 'Important', '#FF3B30', datetime('now')),
-      (1, 'Urgent', '#FF9500', datetime('now')),
-      (1, 'Later', '#34C759', datetime('now'));
-      
-      INSERT INTO events (id, account_id, title, description, location, date_value, start_time, end_time, date_type, priority, color, is_all_day, is_reminder, reminder_minutes_before, created_at, updated_at) VALUES 
-      (1, 1, 'Team Meeting', 'Weekly sync', 'Room A', '2026-05-15', '10:00', '11:00', 'meeting', 'high', '#007AFF', 0, 1, 60, datetime('now'), datetime('now')),
-      (2, 1, 'Project Deadline', 'Submit project', 'Online', '2026-06-01', '23:59', '23:59', 'deadline', 'high', '#FF3B30', 1, 1, 1440, datetime('now'), datetime('now')),
-      (3, 1, 'Doctor Appointment', 'Checkup', 'Hospital', '2026-05-20', '14:00', '15:00', 'reminder', 'medium', '#34C759', 0, 1, 60, datetime('now'), datetime('now')),
-      (4, 1, 'Birthday Party', 'Celebration', 'Restaurant', '2026-05-25', '18:00', '21:00', 'birthday', 'low', '#AF52DE', 0, 1, 60, datetime('now'), datetime('now')),
-      (5, 1, 'Study Session', 'Exam prep', 'Library', '2026-05-18', '09:00', '12:00', 'reminder', 'medium', '#FF9500', 0, 1, 30, datetime('now'), datetime('now'));
-      
-      INSERT INTO event_categories (event_id, category_id) VALUES
-      (1, 4), (1, 1), (2, 5), (2, 1), (3, 2), (4, 3), (5, 2);
-      
-      INSERT INTO event_tags (event_id, tag_id) VALUES
-      (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (4, 3), (5, 1);
-      
-      INSERT INTO reminders (event_id, reminder_time, created_at) VALUES
-      (1, '2026-05-15 09:00', datetime('now')),
-      (2, '2026-05-31 09:00', datetime('now')),
-      (3, '2026-05-20 13:00', datetime('now')),
-      (4, '2026-05-25 17:00', datetime('now')),
-      (5, '2026-05-18 08:30', datetime('now'));
-    `);
-    console.log('✅ Default data inserted');
-  } else {
-    console.log('ℹ️ Existing data found, skipping inserts');
-  }
+  console.log('✅ Database tables ready (no sample data inserted)');
 }
 
-// Call init on startup
+// Initialize database on startup
 initDatabase().catch(console.error);
 
 // ============================================================
@@ -266,7 +233,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // ============================================================
-// ACCOUNTS ENDPOINTS (async)
+// ACCOUNTS ENDPOINTS
 // ============================================================
 app.get('/accounts', async (req: Request, res: Response) => {
   try {
@@ -302,7 +269,7 @@ app.post('/accounts', async (req: Request, res: Response) => {
       INSERT INTO accounts (username, email, password_hash, full_name, created_at)
       VALUES (?, ?, ?, ?, datetime('now'))
     `, username, email, password_hash, full_name);
-    // Auto-create default settings
+    // Auto-create default settings for the new account
     await dbRun(`INSERT INTO account_settings (account_id, created_at) VALUES (?, datetime('now'))`, info.lastID);
     res.status(201).json({ id: info.lastID, message: 'Account created' });
   } catch (err: any) {
@@ -338,10 +305,10 @@ app.post('/events', async (req: Request, res: Response) => {
   try {
     const info = await dbRun(`
       INSERT INTO events (account_id, title, description, location, date_value, start_time, end_time, 
-          date_type, priority, color, is_all_day, is_reminder, reminder_minutes_before, created_at)
+                          date_type, priority, color, is_all_day, is_reminder, reminder_minutes_before, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `, [account_id, title, description, location, date_value, start_time, end_time,
-       date_type, priority, color, is_all_day, is_reminder, reminder_minutes_before]);
+    `, account_id, title, description, location, date_value, start_time, end_time,
+       date_type, priority, color, is_all_day, is_reminder, reminder_minutes_before);
     res.status(201).json({ id: info.lastID, message: 'Event created' });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -355,7 +322,7 @@ app.put('/events/:id', async (req: Request, res: Response) => {
       UPDATE events SET title = ?, description = ?, location = ?, date_value = ?, 
                          start_time = ?, end_time = ?, priority = ?, color = ?, updated_at = datetime('now')
       WHERE id = ?
-    `, [title, description, location, date_value, start_time, end_time, priority, color, req.params.id]);
+    `, title, description, location, date_value, start_time, end_time, priority, color, req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: 'Event not found' });
     res.json({ message: 'Event updated' });
   } catch (err: any) {
@@ -374,9 +341,8 @@ app.delete('/events/:id', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// CATEGORIES, TAGS, REMINDERS, SETTINGS, ETC. (similar async pattern)
+// CATEGORIES
 // ============================================================
-// GET /categories
 app.get('/categories', async (req: Request, res: Response) => {
   try {
     const categories = await dbAll('SELECT * FROM categories');
@@ -386,7 +352,6 @@ app.get('/categories', async (req: Request, res: Response) => {
   }
 });
 
-// POST /categories
 app.post('/categories', async (req: Request, res: Response) => {
   const { account_id, name, color, parent_id } = req.body;
   try {
@@ -400,7 +365,9 @@ app.post('/categories', async (req: Request, res: Response) => {
   }
 });
 
-// GET /tags
+// ============================================================
+// TAGS
+// ============================================================
 app.get('/tags', async (req: Request, res: Response) => {
   try {
     const tags = await dbAll('SELECT * FROM tags');
@@ -410,7 +377,6 @@ app.get('/tags', async (req: Request, res: Response) => {
   }
 });
 
-// POST /tags
 app.post('/tags', async (req: Request, res: Response) => {
   const { account_id, name, color } = req.body;
   try {
@@ -424,7 +390,9 @@ app.post('/tags', async (req: Request, res: Response) => {
   }
 });
 
-// POST /events/:eventId/tags/:tagId
+// ============================================================
+// JUNCTION TABLES
+// ============================================================
 app.post('/events/:eventId/tags/:tagId', async (req: Request, res: Response) => {
   const { eventId, tagId } = req.params;
   try {
@@ -435,7 +403,6 @@ app.post('/events/:eventId/tags/:tagId', async (req: Request, res: Response) => 
   }
 });
 
-// POST /events/:eventId/categories/:categoryId
 app.post('/events/:eventId/categories/:categoryId', async (req: Request, res: Response) => {
   const { eventId, categoryId } = req.params;
   try {
@@ -446,7 +413,9 @@ app.post('/events/:eventId/categories/:categoryId', async (req: Request, res: Re
   }
 });
 
-// GET /reminders
+// ============================================================
+// REMINDERS
+// ============================================================
 app.get('/reminders', async (req: Request, res: Response) => {
   try {
     const reminders = await dbAll('SELECT * FROM reminders');
@@ -456,7 +425,6 @@ app.get('/reminders', async (req: Request, res: Response) => {
   }
 });
 
-// POST /reminders
 app.post('/reminders', async (req: Request, res: Response) => {
   const { event_id, reminder_time } = req.body;
   try {
@@ -470,7 +438,9 @@ app.post('/reminders', async (req: Request, res: Response) => {
   }
 });
 
-// GET /account-settings/:accountId
+// ============================================================
+// ACCOUNT SETTINGS
+// ============================================================
 app.get('/account-settings/:accountId', async (req: Request, res: Response) => {
   try {
     const settings = await dbGet('SELECT * FROM account_settings WHERE account_id = ?', req.params.accountId);
@@ -481,7 +451,6 @@ app.get('/account-settings/:accountId', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /account-settings/:accountId
 app.put('/account-settings/:accountId', async (req: Request, res: Response) => {
   const { theme, language, notification_enabled, timezone } = req.body;
   try {
@@ -497,7 +466,9 @@ app.put('/account-settings/:accountId', async (req: Request, res: Response) => {
   }
 });
 
-// GET /notifications/:accountId
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
 app.get('/notifications/:accountId', async (req: Request, res: Response) => {
   try {
     const notifications = await dbAll(`
@@ -509,7 +480,9 @@ app.get('/notifications/:accountId', async (req: Request, res: Response) => {
   }
 });
 
-// GET /activity-log/:accountId
+// ============================================================
+// ACTIVITY LOG
+// ============================================================
 app.get('/activity-log/:accountId', async (req: Request, res: Response) => {
   try {
     const logs = await dbAll(`
@@ -521,7 +494,9 @@ app.get('/activity-log/:accountId', async (req: Request, res: Response) => {
   }
 });
 
-// GET /export
+// ============================================================
+// EXPORT ALL DATA
+// ============================================================
 app.get('/export', async (req: Request, res: Response) => {
   try {
     const exportData = {
@@ -541,11 +516,9 @@ app.get('/export', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// START SERVER (on all interfaces)
+// START SERVER
 // ============================================================
-
-
-app.listen(PORT, HOST, () => {
+app.listen(PORT, () => {
   console.log(`🚀 Server on http://10.191.168.95:${PORT}`);
   console.log(`   Also http://localhost:${PORT}`);
 });
